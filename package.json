@@ -1,0 +1,32 @@
+{
+  "name": "playwright-auto-healer",
+  "version": "1.0.0",
+  "description": "AI-powered auto-healing for Playwright tests",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "playwright",
+    "testing",
+    "auto-healing",
+    "ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.2.1",
+    "@octokit/rest": "^20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "dotenv": "^16.6.1",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ]
+}
