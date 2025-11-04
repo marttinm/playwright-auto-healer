@@ -4,7 +4,7 @@ AI-powered auto-healing for Playwright tests. When selectors break, AI suggests 
 
 ## Features
 
-- **AI-powered healing**: Uses Google Gemini to suggest new selectors when tests fail
+- **AI-powered healing**: Uses AI (currently Google Gemini, with support for other providers planned) to suggest new selectors when tests fail
 - **Automatic retry**: Seamlessly retries with healed selectors  
 - **Healing visibility**: See exactly what selectors were healed and get update suggestions
 - **Auto PR creation**: Optionally creates GitHub PRs with fixes
@@ -25,10 +25,10 @@ npm install playwright-auto-healer
 cp .env.example .env
 ```
 
-2. Add your Google Gemini API key to `.env`:
+2. Add your API key to `.env`:
 
 ```env
-GEMINI_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ## Usage
@@ -72,7 +72,7 @@ npx playwright-auto-healer scan "npx playwright test login.spec.ts"
 
 ```typescript
 interface HealerConfig {
-  aiProvider?: 'gemini';
+  aiProvider?: 'gemini'; // More providers coming soon
   apiKey?: string;
   createPR?: boolean;
   projectPath?: string;
@@ -80,11 +80,18 @@ interface HealerConfig {
 }
 ```
 
+## Roadmap
+
+- **Multiple AI Providers**: Support for OpenAI, Anthropic Claude, Azure OpenAI, and custom providers
+- **Enhanced CLI**: Full project scanning and reporting
+- **Performance optimizations**: Caching and faster healing
+- **Enterprise features**: Team analytics and compliance
+
 ## How It Works
 
 1. **Selector Fails**: When a Playwright selector doesn't find an element
 2. **DOM Analysis**: Captures current page DOM structure
-3. **AI Suggestion**: Gemini analyzes the DOM and suggests a new selector
+3. **AI Suggestion**: AI analyzes the DOM and suggests a new selector
 4. **Validation**: Tests the suggested selector on the live page
 5. **Healing**: If successful, continues test execution with new selector
 6. **Reporting**: Logs healing results for test maintenance
