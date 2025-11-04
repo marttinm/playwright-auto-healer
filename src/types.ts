@@ -11,5 +11,5 @@ export interface HealingResult {
   originalSelector: string;
   newSelector?: string;
   error?: string;
-  suggestion?: string; // User-friendly suggestion for updating their code
+  suggestion?: string;
 }

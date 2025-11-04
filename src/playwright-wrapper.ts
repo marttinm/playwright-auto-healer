@@ -1,6 +1,6 @@
-// Using generic types to avoid Playwright version conflicts
 type PlaywrightPage = any;
 type PlaywrightLocator = any;
+
 import { AutoHealer } from './healer';
 import { HealerConfig } from './types';
 

@@ -1,4 +1,3 @@
-// Using generic types to avoid Playwright version conflicts
 type PlaywrightPage = any;
 import { promises as fs } from 'fs';
 import path from 'path';
