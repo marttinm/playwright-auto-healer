@@ -14,7 +14,7 @@
     "auto-healing",
     "ai"
   ],
-  "author": "Your Name",
+  "author": "Martin Marchetto <martin.marchetto@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.2.1",
@@ -27,6 +27,7 @@
   },
   "files": [
     "dist/**/*",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ]
 }
