@@ -59,7 +59,7 @@ export class AutoHealer {
         // Save successful DOM for future reference
         await this.domManager.saveDOM(selector, currentDOM);
         
-        console.log(`✅ Healed: ${selector} → ${newSelector}`);
+        console.log(`Healed: ${selector} → ${newSelector}`);
         
         return {
           success: true,
