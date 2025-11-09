@@ -4,6 +4,9 @@
   "description": "AI-powered auto-healing for Playwright tests",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "playwright-auto-healer": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
@@ -18,11 +21,11 @@
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.2.1",
-    "@octokit/rest": "^20.0.0"
+    "@octokit/rest": "^20.0.0",
+    "dotenv": "^16.6.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "dotenv": "^16.6.1",
     "typescript": "^5.0.0"
   },
   "files": [

@@ -1,6 +1,6 @@
+// Using generic types to avoid Playwright version conflicts
 type PlaywrightPage = any;
 type PlaywrightLocator = any;
-
 import { HealerConfig, HealingResult } from './types';
 import { AIProvider } from './ai-provider';
 import { DOMManager } from './dom-manager';
@@ -59,7 +59,8 @@ export class AutoHealer {
         // Save successful DOM for future reference
         await this.domManager.saveDOM(selector, currentDOM);
         
-        console.log(`✅ Healed: ${selector} → ${newSelector}`);
+        console.log(`Healed selector: ${selector} → ${newSelector}`);
+        console.log(`Consider updating your test with the new selector: ${newSelector}`);
         
         return {
           success: true,

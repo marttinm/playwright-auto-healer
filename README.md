@@ -33,7 +33,23 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 ## Usage
 
-### Basic Healing
+### Method 1: Automatic Setup (Recommended)
+
+Add this to your test file to enable real-time healing:
+
+```typescript
+import { test } from '@playwright/test';
+import { setupAutoHealing } from 'playwright-auto-healer';
+
+test('login test with auto-healing', async ({ page }) => {
+  setupAutoHealing(page); // Enable auto-healing for this page
+  
+  await page.goto('https://example.com');
+  await page.locator('#broken-selector').click(); // Will auto-heal if broken
+});
+```
+
+### Method 2: Manual Healing
 
 ```typescript
 import { AutoHealer } from 'playwright-auto-healer';
@@ -48,25 +64,18 @@ if (result.success) {
 }
 ```
 
-### Wrapper Integration
-
-```typescript
-import { PlaywrightHealer } from 'playwright-auto-healer';
-
-const healer = new PlaywrightHealer(page, {
-  apiKey: process.env.GEMINI_API_KEY
-});
-
-// Auto-healing is built in
-await healer.click('.might-break-selector');
-await healer.fill('#input-field', 'text');
-```
-
-### CLI Scan Mode (Coming Soon)
+### Method 3: CLI Scan Mode
 
 ```bash
-npx playwright-auto-healer scan "npx playwright test login.spec.ts"
+npx playwright-auto-healer scan
+# or
+npx playwright-auto-healer scan npx playwright test
 ```
+
+This will:
+- Run your tests with healing enabled
+- Generate `auto-heal-recommendations/selector-recommendations.json`
+- Create `auto-heal-recommendations/healing-report.md`
 
 ## Configuration
 
