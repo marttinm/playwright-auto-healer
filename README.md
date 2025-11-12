@@ -1,110 +1,138 @@
 # Playwright Auto-Healer
 
-AI-powered auto-healing for Playwright tests. When selectors break, AI suggests fixes automatically.
+AI-powered auto-healing for Playwright tests. When selectors fail, AI suggests and tests fixes automatically.
 
-## Features
+## Quick Start
 
-- **AI-powered healing**: Uses AI (currently Google Gemini, with support for other providers planned) to suggest new selectors when tests fail
-- **Automatic retry**: Seamlessly retries with healed selectors  
-- **Healing visibility**: See exactly what selectors were healed and get update suggestions
-- **Auto PR creation**: Optionally creates GitHub PRs with fixes
-- **DOM history**: Learns from past DOMs for better suggestions
-- **Simple integration**: Drop-in replacement for Playwright actions
-
-## Installation
-
+1. Install:
 ```bash
 npm install playwright-auto-healer
 ```
 
-## Setup
+2. Set up API key in `.env`:
+```env
+GEMINI_API_KEY=your_key_here
+```
 
-1. Copy the environment variables template:
+3. Update test imports:
+```typescript
+// Change from:
+import { test, expect } from '@playwright/test';
+
+// To:
+import { test, expect } from 'playwright-auto-healer';
+```
+
+4. Run with CLI:
+```bash
+npx playwright-auto-healer scan "npx playwright test"
+```
+
+The CLI will automatically detect broken selectors, heal them with AI, and generate reports.
+
+## How It Works
+
+1. **Selector Fails** → Playwright can't find element
+2. **AI Analysis** → Analyzes DOM and suggests new selector  
+3. **Validation** → Tests suggested selector on live page
+4. **Auto-Heal** → Continues test with working selector
+5. **Report** → Generates recommendations in `.playwright-healer/recommendations/`
+
+## Project Structure
+
+After running tests, the library creates a single organized folder:
+
+```
+.playwright-healer/
+├── recommendations/        # AI healing reports (keep these!)
+│   ├── healing-report.md
+│   └── selector-recommendations.json
+├── logs/                  # Historical DOM snapshots (for debugging)
+│   └── *_dom.html
+└── temp/                  # Runtime temporary files
+    ├── healing-results.json
+    └── last-prompt.txt
+```
+
+> 💡 Add `.playwright-healer/` to your `.gitignore` to keep your repo clean.
+
+**File Management:**
+- **recommendations/** and **logs/** - Kept permanently for your review
+- **temp/** - Automatically cleaned at the **start** of each new run (not at the end)
+- This follows the same pattern as Playwright, Jest, and other testing tools
+- Temp files remain after a run to help with debugging failures
+
+## Features
+
+- ✨ **AI-powered** - Uses Google Gemini to suggest fixes
+- 🔄 **Automatic retry** - Seamlessly retries with healed selectors
+- 📊 **Detailed reports** - JSON and Markdown healing reports
+- 🎯 **Simple setup** - Just change imports and run CLI
+- 🔍 **DOM learning** - Uses historical DOMs for better suggestions
+
+## Usage Options
+
+### Option 1: CLI (Recommended)
 
 ```bash
-cp .env.example .env
+npx playwright-auto-healer scan "npx playwright test"
 ```
 
-2. Add your API key to `.env`:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-
-## Usage
-
-### Method 1: Automatic Setup (Recommended)
-
-Add this to your test file to enable real-time healing:
-
+Requires import change in tests:
 ```typescript
-import { test } from '@playwright/test';
+import { test, expect } from 'playwright-auto-healer';
+```
+
+### Option 2: Manual Setup
+
+Add to each test:
+```typescript
 import { setupAutoHealing } from 'playwright-auto-healer';
 
-test('login test with auto-healing', async ({ page }) => {
-  setupAutoHealing(page); // Enable auto-healing for this page
-  
-  await page.goto('https://example.com');
-  await page.locator('#broken-selector').click(); // Will auto-heal if broken
+test('my test', async ({ page }) => {
+  setupAutoHealing(page);
+  // ... your test code
 });
 ```
 
-### Method 2: Manual Healing
+### Option 3: API
 
 ```typescript
 import { AutoHealer } from 'playwright-auto-healer';
 
-const healer = new AutoHealer({
-  apiKey: process.env.GEMINI_API_KEY
-});
-
+const healer = new AutoHealer({ apiKey: process.env.GEMINI_API_KEY });
 const result = await healer.healSelector(page, 'broken-selector');
+
 if (result.success) {
-  await page.click(result.newSelector);
+  await page.locator(result.newSelector).click();
 }
 ```
-
-### Method 3: CLI Scan Mode
-
-```bash
-npx playwright-auto-healer scan
-# or
-npx playwright-auto-healer scan npx playwright test
-```
-
-This will:
-- Run your tests with healing enabled
-- Generate `auto-heal-recommendations/selector-recommendations.json`
-- Create `auto-heal-recommendations/healing-report.md`
 
 ## Configuration
 
 ```typescript
 interface HealerConfig {
-  aiProvider?: 'gemini'; // More providers coming soon
-  apiKey?: string;
-  createPR?: boolean;
-  projectPath?: string;
-  maxRetries?: number;
+  aiProvider?: 'gemini';      // More providers coming soon
+  apiKey?: string;             // Gemini API key
+  createPR?: boolean;          // Auto-create GitHub PRs (future)
+  projectPath?: string;        // Project root path
+  maxRetries?: number;         // Max healing attempts
 }
 ```
 
+## Reports
+
+After running, check `.playwright-healer/recommendations/`:
+- `healing-report.md` - Human-readable report with before/after
+- `selector-recommendations.json` - Machine-readable JSON
+
 ## Roadmap
 
-- **Multiple AI Providers**: Support for OpenAI, Anthropic Claude, Azure OpenAI, and custom providers
-- **Enhanced CLI**: Full project scanning and reporting
-- **Performance optimizations**: Caching and faster healing
-- **Enterprise features**: Team analytics and compliance
-
-## How It Works
-
-1. **Selector Fails**: When a Playwright selector doesn't find an element
-2. **DOM Analysis**: Captures current page DOM structure
-3. **AI Suggestion**: AI analyzes the DOM and suggests a new selector
-4. **Validation**: Tests the suggested selector on the live page
-5. **Healing**: If successful, continues test execution with new selector
-6. **Reporting**: Logs healing results for test maintenance
+- [ ] OpenAI, Claude, Azure OpenAI support
+- [ ] Performance optimizations and caching
+- [ ] GitHub PR auto-creation
+- [ ] Team analytics dashboard
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT - see [LICENSE](LICENSE)

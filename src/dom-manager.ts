@@ -7,7 +7,7 @@ export class DOMManager {
   private logsDir: string;
 
   constructor(projectPath: string) {
-    this.logsDir = path.join(projectPath, 'healer-logs');
+    this.logsDir = path.join(projectPath, '.playwright-healer', 'logs');
   }
 
   async ensureLogsDir(): Promise<void> {

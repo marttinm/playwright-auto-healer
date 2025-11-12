@@ -7,67 +7,40 @@ import { join } from 'path';
 
 config({ path: process.cwd() + '/.env' });
 
-interface HealingRecommendation {
+interface HealingResult {
   file: string;
   line: number;
-  brokenSelector: string;
-  suggestedFix: string;
-  confidence: 'high' | 'medium' | 'low';
-  context: string;
-}
-
-interface HealingReport {
+  originalSelector: string;
+  newSelector?: string;
+  status: 'healed' | 'failed';
   timestamp: string;
-  totalTests: number;
-  failedSelectors: number;
-  recommendations: HealingRecommendation[];
-  stats: {
-    healed: number;
-    failed: number;
-    skipped: number;
-  };
 }
 
 class PlaywrightHealerCLI {
-  private recommendations: HealingRecommendation[] = [];
-  private outputDir = 'auto-heal-recommendations';
+  private outputDir = '.playwright-healer/recommendations';
 
   async run(command: string[]): Promise<void> {
-    console.log('Starting Playwright Auto-Healer scan...');
+    console.log('Starting Playwright Auto-Healer...\n');
+    
+    // Clean temp files from previous run (best practice)
+    this.cleanPreviousTempFiles();
     
     this.ensureOutputDirectory();
     
-    const env = {
-      ...process.env,
-      PLAYWRIGHT_HEALER_ACTIVE: 'true'
-    };
-
     const playwrightProcess = spawn(command[0], command.slice(1), {
-      stdio: 'pipe',
-      env
-    });
-
-    let stderr = '';
-    let stdout = '';
-
-    playwrightProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      stdout += output;
-      process.stdout.write(data);
-    });
-
-    playwrightProcess.stderr.on('data', (data) => {
-      const output = data.toString();
-      stderr += output;
-      this.parsePlaywrightErrors(output);
-      process.stderr.write(data);
+      stdio: 'inherit',
+      env: { ...process.env, PLAYWRIGHT_HEALER_ACTIVE: 'true' },
+      shell: true
     });
 
     playwrightProcess.on('close', (code) => {
-      this.generateRecommendations(stderr, stdout);
-      this.generateReport();
-      console.log(`\nHealing scan complete. Check ${this.outputDir}/ for recommendations.`);
-      process.exit(code || 0);
+      // Delay to ensure healing results are fully written
+      // (Playwright may still be writing files after process closes)
+      setTimeout(() => {
+        this.generateReport();
+        console.log(`\nReports saved to ${this.outputDir}/`);
+        process.exit(code || 0);
+      }, 2000);
     });
   }
 
@@ -77,267 +50,135 @@ class PlaywrightHealerCLI {
     }
   }
 
-  private parsePlaywrightErrors(output: string): void {
-    const lines = output.split('\n');
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // Parse locator errors
-      const locatorMatch = line.match(/locator\(['"`]([^'"`]+)['"`]\)/);
-      if (locatorMatch && line.includes('not found')) {
-        const brokenSelector = locatorMatch[1];
-        
-        // Extract file and line info from stack trace
-        const fileMatch = lines.slice(i, i + 10).find(l => 
-          l.includes('.spec.ts') || l.includes('.spec.js')
-        );
-        
-        if (fileMatch) {
-          const fileInfo = this.extractFileInfo(fileMatch);
-          if (fileInfo) {
-            this.addRecommendation({
-              file: fileInfo.file,
-              line: fileInfo.line,
-              brokenSelector,
-              suggestedFix: this.suggestFix(brokenSelector),
-              confidence: this.calculateConfidence(brokenSelector),
-              context: line.trim()
-            });
-          }
-        }
-      }
-
-      // Parse timeout errors that might indicate selector issues
-      if (line.includes('Timeout') && line.includes('waiting for')) {
-        const selectorMatch = line.match(/waiting for (?:locator\(['"`]([^'"`]+)['"`]\)|selector "([^"]+)")/);
-        if (selectorMatch) {
-          const brokenSelector = selectorMatch[1] || selectorMatch[2];
-          this.addRecommendation({
-            file: 'unknown',
-            line: 0,
-            brokenSelector,
-            suggestedFix: this.suggestFix(brokenSelector),
-            confidence: 'medium',
-            context: 'Timeout waiting for element'
-          });
-        }
+  private cleanPreviousTempFiles(): void {
+    // Clean temp files from previous run (best practice - clean at start, not end)
+    const tempFile = join(process.cwd(), '.playwright-healer', 'temp', 'healing-results.json');
+    if (existsSync(tempFile)) {
+      try { 
+        require('fs').unlinkSync(tempFile);
+        console.log('Cleaned previous temp files');
+      } catch (e) { 
+        // Ignore errors if file is in use
       }
     }
-  }
-
-  private extractFileInfo(line: string): { file: string; line: number } | null {
-    const match = line.match(/at.*\(([^:]+):(\d+):\d+\)/);
-    if (match) {
-      return {
-        file: match[1].replace(process.cwd() + '/', ''),
-        line: parseInt(match[2])
-      };
-    }
-    return null;
-  }
-
-  private suggestFix(brokenSelector: string): string {
-    // Common patterns for fixing selectors
-    const fixes = {
-      // Remove common suffixes that might be test artifacts
-      '-broken': '',
-      '-wrong': '',
-      '-invalid': '',
-      '-error': '',
-      '-test': '',
-      '1': '', // Remove trailing numbers
-      '2': '',
-      '3': '',
-      '-broken-2': '',
-      '-adaptive': ''
-    };
-
-    let suggested = brokenSelector;
-    for (const [pattern, replacement] of Object.entries(fixes)) {
-      if (suggested.includes(pattern)) {
-        suggested = suggested.replace(pattern, replacement);
-        break;
-      }
-    }
-
-    // If no pattern matched, try some common alternatives
-    if (suggested === brokenSelector) {
-      if (brokenSelector.startsWith('#')) {
-        // Try data-testid version
-        const id = brokenSelector.slice(1);
-        suggested = `[data-testid="${id}"]`;
-      }
-    }
-
-    return suggested;
-  }
-
-  private calculateConfidence(selector: string): 'high' | 'medium' | 'low' {
-    const highConfidencePatterns = ['-broken', '-wrong', '-invalid', '-error'];
-    const mediumConfidencePatterns = ['-test', '1', '2', '3'];
-    
-    if (highConfidencePatterns.some(p => selector.includes(p))) {
-      return 'high';
-    }
-    if (mediumConfidencePatterns.some(p => selector.includes(p))) {
-      return 'medium';
-    }
-    return 'low';
-  }
-
-  private addRecommendation(rec: HealingRecommendation): void {
-    // Avoid duplicates
-    const exists = this.recommendations.some(r => 
-      r.brokenSelector === rec.brokenSelector && r.file === rec.file
-    );
-    if (!exists) {
-      this.recommendations.push(rec);
-    }
-  }
-
-  private generateRecommendations(stderr: string, stdout: string): void {
-    // Additional analysis could be done here
-    console.log(`\nFound ${this.recommendations.length} potential selector issues`);
   }
 
   private generateReport(): void {
-    // Read healing results from temp file
-    const tempFilePath = join(process.cwd(), '.playwright-healer-temp', 'healing-results.json');
-    let realResults: any[] = [];
-    
-    if (existsSync(tempFilePath)) {
-      try {
-        const content = readFileSync(tempFilePath, 'utf-8');
-        realResults = JSON.parse(content);
-        console.log(`Found ${realResults.length} healing attempts in temp file`);
-      } catch (e) {
-        console.log('Could not read healing results from temp file');
-      }
-    }
+    const results = this.loadHealingResults();
+    const healed = results.filter(r => r.status === 'healed');
+    const failed = results.filter(r => r.status === 'failed');
 
-    // Combine real results with parsed results
-    const allRecommendations = [
-      ...realResults.map(r => ({
-        file: r.file,
-        line: r.line,
-        brokenSelector: r.originalSelector,
-        suggestedFix: r.newSelector || this.suggestFix(r.originalSelector),
-        confidence: r.status === 'healed' ? 'high' as const : 'medium' as const,
-        context: r.status === 'healed' ? 'Successfully healed by AI' : 'Failed to heal with AI'
-      })),
-      ...this.recommendations
-    ];
-
-    // Remove duplicates
-    const uniqueRecommendations = allRecommendations.filter((rec, index, arr) => 
-      arr.findIndex(r => r.brokenSelector === rec.brokenSelector) === index
-    );
-
-    const report: HealingReport = {
+    const report = {
       timestamp: new Date().toISOString(),
-      totalTests: this.extractTestCount(),
-      failedSelectors: uniqueRecommendations.length,
-      recommendations: uniqueRecommendations,
       stats: {
-        healed: realResults.filter(r => r.status === 'healed').length,
-        failed: uniqueRecommendations.length - realResults.filter(r => r.status === 'healed').length,
-        skipped: 0
-      }
+        total: results.length,
+        healed: healed.length,
+        failed: failed.length
+      },
+      results: results
     };
 
-    // Write JSON report
-    const jsonPath = join(this.outputDir, 'selector-recommendations.json');
-    writeFileSync(jsonPath, JSON.stringify(report, null, 2));
+    // Save JSON report
+    writeFileSync(
+      join(this.outputDir, 'selector-recommendations.json'),
+      JSON.stringify(report, null, 2)
+    );
 
-    // Write human-readable report
-    const mdPath = join(this.outputDir, 'healing-report.md');
-    this.generateMarkdownReport(mdPath, report);
+    // Save Markdown report
+    writeFileSync(
+      join(this.outputDir, 'healing-report.md'),
+      this.generateMarkdown(healed, failed)
+    );
 
-    console.log(`\nReports generated:`);
-    console.log(`- ${jsonPath}`);
-    console.log(`- ${mdPath}`);
-    
-    if (report.stats.healed > 0) {
-      console.log(`\nSuccessfully healed ${report.stats.healed} selectors!`);
+    // Note: We keep temp files for debugging (like Playwright, Jest, etc.)
+    // They will be cleaned at the start of the next run
+
+    // Print summary
+    if (healed.length > 0) {
+      console.log(`\nSuccessfully healed ${healed.length} selector(s)!`);
+    } else if (results.length > 0) {
+      console.log(`\n${results.length} selector(s) failed to heal. Check the report for details.`);
+    } else {
+      console.log('\nNo broken selectors detected.');
     }
+  }
 
-    // Clean up temp file
-    if (existsSync(tempFilePath)) {
+  private loadHealingResults(): HealingResult[] {
+    const tempFile = join(process.cwd(), '.playwright-healer', 'temp', 'healing-results.json');
+    
+    if (existsSync(tempFile)) {
       try {
-        const fs = require('fs');
-        fs.unlinkSync(tempFilePath);
+        return JSON.parse(readFileSync(tempFile, 'utf-8'));
       } catch (e) {
-        // Ignore cleanup errors
+        return [];
       }
     }
+    return [];
   }
 
-  private generateMarkdownReport(path: string, report: HealingReport): void {
-    const content = `# Playwright Auto-Healer Report
+  private generateMarkdown(healed: HealingResult[], failed: HealingResult[]): string {
+    let md = `# Playwright Auto-Healer Report\n\nGenerated: ${new Date().toISOString()}\n\n`;
+    md += `## Summary\n\n`;
+    md += `- **Total**: ${healed.length + failed.length}\n`;
+    md += `- **Healed**: ${healed.length}\n`;
+    md += `- **Failed**: ${failed.length}\n\n`;
 
-Generated: ${report.timestamp}
+    if (healed.length > 0) {
+      md += `## Successfully Healed\n\n`;
+      healed.forEach((r, i) => {
+        md += `### ${i + 1}. \`${r.originalSelector}\` → \`${r.newSelector}\`\n\n`;
+        md += `\`\`\`typescript\n`;
+        md += `// Before\nawait page.locator('${r.originalSelector}').click();\n\n`;
+        md += `// After\nawait page.locator('${r.newSelector}').click();\n`;
+        md += `\`\`\`\n\n`;
+      });
+    }
 
-## Summary
-- Total failed selectors: ${report.failedSelectors}
-- Recommendations generated: ${report.recommendations.length}
+    if (failed.length > 0) {
+      md += `## Failed to Heal\n\n`;
+      failed.forEach((r, i) => {
+        md += `### ${i + 1}. \`${r.originalSelector}\`\n\n`;
+        md += `Manual inspection required.\n\n`;
+      });
+    }
 
-## Recommendations
+    md += `## Next Steps\n\n`;
+    md += `\`\`\`bash\n`;
+    md += `# Update your tests with healed selectors, then re-run\n`;
+    md += `npx playwright-auto-healer scan "npx playwright test"\n`;
+    md += `\`\`\`\n`;
 
-${report.recommendations.map((rec, i) => `
-### ${i + 1}. ${rec.file}:${rec.line}
-
-**Broken Selector:** \`${rec.brokenSelector}\`
-**Suggested Fix:** \`${rec.suggestedFix}\`
-**Confidence:** ${rec.confidence}
-**Context:** ${rec.context}
-
-`).join('')}
-
-## How to Apply Fixes
-
-Replace the broken selectors in your test files with the suggested fixes above.
-`;
-
-    writeFileSync(path, content);
-  }
-
-  private extractTestCount(): number {
-    return 0; // Could be enhanced to parse test output
+    return md;
   }
 }
 
-function parseArgs(): { command: string[] } {
+function parseArgs(): string[] {
   const args = process.argv.slice(2);
   
   if (args.length === 0 || args[0] !== 'scan') {
-    console.error('Usage: playwright-auto-healer scan [playwright-command]');
-    console.error('Example: playwright-auto-healer scan npx playwright test');
+    console.error('Usage: playwright-auto-healer scan [command]');
+    console.error('Example: playwright-auto-healer scan "npx playwright test"');
     process.exit(1);
   }
 
-  let command: string[];
-  if (args.length === 1) {
-    // Default command
-    command = ['npx', 'playwright', 'test'];
-  } else {
-    // Parse the command string or use remaining args
-    if (args[1].includes(' ')) {
-      command = args[1].split(' ');
-    } else {
-      command = args.slice(1);
-    }
-  }
-
   if (!process.env.GEMINI_API_KEY) {
-    console.error('Warning: GEMINI_API_KEY not found. Advanced healing features disabled.');
+    console.error('Error: GEMINI_API_KEY not found in environment');
+    console.error('Create a .env file with: GEMINI_API_KEY=your_key_here');
+    process.exit(1);
   }
 
-  return { command };
+  // Default to "npx playwright test" if no command provided
+  if (args.length === 1) {
+    return ['npx', 'playwright', 'test'];
+  }
+
+  // Parse command
+  const commandStr = args.slice(1).join(' ');
+  return commandStr.split(' ');
 }
 
 async function main(): Promise<void> {
-  const { command } = parseArgs();
+  const command = parseArgs();
   const cli = new PlaywrightHealerCLI();
   await cli.run(command);
 }

@@ -13,25 +13,17 @@ interface HealingResult {
   timestamp: string;
 }
 
-function getResultsFilePath(): string {
-  const tempDir = join(process.cwd(), '.playwright-healer-temp');
-  if (!existsSync(tempDir)) {
-    mkdirSync(tempDir, { recursive: true });
-  }
-  return join(tempDir, 'healing-results.json');
-}
-
 function saveHealingResult(result: HealingResult): void {
-  const filePath = getResultsFilePath();
+  const dir = join(process.cwd(), '.playwright-healer', 'temp');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  
+  const filePath = join(dir, 'healing-results.json');
   let results: HealingResult[] = [];
   
   if (existsSync(filePath)) {
     try {
-      const content = readFileSync(filePath, 'utf-8');
-      results = JSON.parse(content);
-    } catch (e) {
-      results = [];
-    }
+      results = JSON.parse(readFileSync(filePath, 'utf-8'));
+    } catch (e) { }
   }
   
   results.push(result);
@@ -46,103 +38,72 @@ export function instrumentPage(page: PlaywrightPage, config: HealerConfig): void
     const locator = originalLocator(selector, options);
     const originalClick = locator.click?.bind(locator);
     const originalFill = locator.fill?.bind(locator);
+    
+    // Helper to heal and retry
+    const healAndRetry = async (error: any, result: any, actionFn: () => Promise<any>) => {
+      if (result.success && result.newSelector) {
+        console.log(`Healed: "${selector}" -> "${result.newSelector}"`);
+        
+        saveHealingResult({
+          file: 'auto-detected',
+          line: 0,
+          originalSelector: selector,
+          newSelector: result.newSelector,
+          status: 'healed',
+          timestamp: new Date().toISOString()
+        });
+        
+        try {
+          return await actionFn();
+        } catch (healedError) {
+          console.log(`Healed selector also failed: "${result.newSelector}"`);
+          saveHealingResult({
+            file: 'auto-detected',
+            line: 0,
+            originalSelector: selector,
+            newSelector: result.newSelector,
+            status: 'failed',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } else {
+        console.log(`Healing failed: ${result.error || 'No suggestion'}`);
+        saveHealingResult({
+          file: 'auto-detected',
+          line: 0,
+          originalSelector: selector,
+          newSelector: result.newSelector || undefined,
+          status: 'failed',
+          timestamp: new Date().toISOString()
+        });
+      }
+      throw error;
+    };
 
     if (originalClick) {
-      locator.click = async function(options?: any) {
+      locator.click = async function(clickOptions?: any) {
         try {
-          return await originalClick(options);
+          return await originalClick({ ...clickOptions, timeout: 5000 });
         } catch (error) {
-          console.log(`Click failed, attempting healing: ${selector}`);
-          
-          try {
-            const result = await healer.healSelector(page, selector);
-            
-            if (result.success && result.newSelector) {
-              console.log(`Healed: ${selector} -> ${result.newSelector}`);
-              
-              saveHealingResult({
-                file: 'detected-in-test',
-                line: 0,
-                originalSelector: selector,
-                newSelector: result.newSelector,
-                status: 'healed',
-                timestamp: new Date().toISOString()
-              });
-              
-              return page.locator(result.newSelector).click(options);
-            } else {
-              saveHealingResult({
-                file: 'detected-in-test',
-                line: 0,
-                originalSelector: selector,
-                status: 'failed',
-                timestamp: new Date().toISOString()
-              });
-              throw error;
-            }
-          } catch (healingError) {
-            console.log(`Healing failed for ${selector}: ${healingError}`);
-            
-            saveHealingResult({
-              file: 'detected-in-test',
-              line: 0,
-              originalSelector: selector,
-              status: 'failed',
-              timestamp: new Date().toISOString()
-            });
-            
-            throw error;
-          }
+          console.log(`Click failed on "${selector}", attempting AI healing...`);
+          const result = await healer.healSelector(page, selector);
+          return await healAndRetry(error, result, () => 
+            page.locator(result.newSelector!).click(clickOptions)
+          );
         }
       };
     }
 
     if (originalFill) {
-      locator.fill = async function(value: string, options?: any) {
+      locator.fill = async function(value: string, fillOptions?: any) {
         try {
-          return await originalFill(value, options);
+          return await originalFill(value, { ...fillOptions, timeout: 5000 });
         } catch (error) {
-          console.log(`Fill failed, attempting healing: ${selector}`);
-          
-          try {
-            const result = await healer.healSelector(page, selector);
-            
-            if (result.success && result.newSelector) {
-              console.log(`Healed: ${selector} -> ${result.newSelector}`);
-              
-              saveHealingResult({
-                file: 'detected-in-test',
-                line: 0,
-                originalSelector: selector,
-                newSelector: result.newSelector,
-                status: 'healed',
-                timestamp: new Date().toISOString()
-              });
-              
-              return page.locator(result.newSelector).fill(value, options);
-            } else {
-              saveHealingResult({
-                file: 'detected-in-test',
-                line: 0,
-                originalSelector: selector,
-                status: 'failed',
-                timestamp: new Date().toISOString()
-              });
-              throw error;
-            }
-          } catch (healingError) {
-            console.log(`Healing failed for ${selector}: ${healingError}`);
-            
-            saveHealingResult({
-              file: 'detected-in-test',
-              line: 0,
-              originalSelector: selector,
-              status: 'failed',
-              timestamp: new Date().toISOString()
-            });
-            
-            throw error;
-          }
+          console.log(`Fill failed on "${selector}", attempting AI healing...`);
+          const result = await healer.healSelector(page, selector);
+          return await healAndRetry(error, result, () => 
+            page.locator(result.newSelector!).fill(value, fillOptions)
+          );
         }
       };
     }

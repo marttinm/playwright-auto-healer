@@ -12,19 +12,29 @@ export class AutoHealer {
 
   constructor(config: HealerConfig) {
     this.config = {
-      aiProvider: 'gemini',
+      aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'ollama') || 'ollama',
       apiKey: process.env.GEMINI_API_KEY || '',
+      ollamaModel: process.env.OLLAMA_MODEL || 'hhao/qwen2.5-coder-tools:7b',
+      ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
       createPR: false,
       projectPath: process.cwd(),
       maxRetries: 1,
       ...config
     };
 
-    if (!this.config.apiKey) {
-      throw new Error('Gemini API key is required');
+    const provider = this.config.aiProvider || 'ollama';
+    console.log(`Using AI Provider: ${provider}`);
+    
+    if (provider === 'gemini' && !this.config.apiKey) {
+      throw new Error('GEMINI_API_KEY is required when using Gemini provider. Set AI_PROVIDER=ollama to use local Ollama instead.');
     }
 
-    this.aiProvider = new AIProvider(this.config.apiKey);
+    this.aiProvider = new AIProvider(
+      provider,
+      this.config.apiKey,
+      this.config.ollamaModel,
+      this.config.ollamaBaseUrl
+    );
     this.domManager = new DOMManager(this.config.projectPath);
   }
 

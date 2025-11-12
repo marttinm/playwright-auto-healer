@@ -16,19 +16,19 @@ export class PlaywrightHealer {
 
   async click(selector: string): Promise<void> {
     await this.tryAction(selector, async (locator) => {
-      await locator.click();
+      await locator.click({ timeout: 5000 });
     });
   }
 
   async fill(selector: string, text: string): Promise<void> {
     await this.tryAction(selector, async (locator) => {
-      await locator.fill(text);
+      await locator.fill(text, { timeout: 5000 });
     });
   }
 
   async type(selector: string, text: string): Promise<void> {
     await this.tryAction(selector, async (locator) => {
-      await locator.type(text);
+      await locator.type(text, { timeout: 5000 });
     });
   }
 
@@ -44,6 +44,7 @@ export class PlaywrightHealer {
   ): Promise<void> {
     try {
       const locator = this.page.locator(selector);
+      // Use shorter timeout for initial try to fail fast
       await action(locator);
     } catch (error) {
       console.log(`Selector failed: ${selector}`);

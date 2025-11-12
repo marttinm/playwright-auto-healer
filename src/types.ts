@@ -1,6 +1,8 @@
 export interface HealerConfig {
-  aiProvider?: 'gemini';
+  aiProvider?: 'gemini' | 'ollama';
   apiKey?: string;
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
   createPR?: boolean;
   projectPath?: string;
   maxRetries?: number;
