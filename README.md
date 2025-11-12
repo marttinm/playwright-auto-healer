@@ -301,7 +301,6 @@ This flow applies to **Methods 1, 2, and 4** (automatic healing):
 **Method 3 (Manual)** stops after "Validate Fix" and returns control to you.
 
 **Method 5** only accesses the "Generate Report" step to retrieve results.
-```
 
 ## Configuration
 
