@@ -1,138 +1,494 @@
+<div align="center">
+
 # Playwright Auto-Healer
 
-AI-powered auto-healing for Playwright tests. When selectors fail, AI suggests and tests fixes automatically.
+**AI-powered test maintenance for Playwright**
+
+[![npm version](https://img.shields.io/npm/v/playwright-auto-healer.svg)](https://www.npmjs.com/package/playwright-auto-healer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+[Features](#features) • [Quick Start](#quick-start) • [Usage](#usage) • [Configuration](#configuration) • [Reports](#reports)
+
+</div>
+
+---
+
+## Overview
+
+Playwright Auto-Healer automatically fixes broken selectors in your Playwright tests using AI. When a selector fails, it analyzes the DOM, suggests a fix, validates it, and continues your test execution—all without manual intervention.
+
+**Perfect for:**
+- Reducing test maintenance overhead
+- Handling dynamic UIs and frequent UI changes
+- CI/CD pipelines with auto-healing capabilities
+- Teams wanting self-healing test suites
+
+## Features
+
+- **AI-Powered Healing** - Uses Google Gemini or local Ollama for intelligent selector suggestions
+- **Zero Configuration** - Works out of the box with sensible defaults
+- **Automatic Retry** - Seamlessly retries with healed selectors
+- **Detailed Reports** - JSON and Markdown reports with before/after comparisons
+- **Multiple APIs** - Choose from CLI, function hooks, or class-based approaches
+- **Historical Learning** - Uses past DOM snapshots for better suggestions
+- **Production Ready** - Follows industry best practices for temp file management
 
 ## Quick Start
 
-1. Install:
+### Installation
+
 ```bash
 npm install playwright-auto-healer
 ```
 
-2. Set up API key in `.env`:
+### Setup
+
+Create a `.env` file in your project root:
+
 ```env
-GEMINI_API_KEY=your_key_here
+# Option 1: Use local Ollama (free, no API key needed)
+AI_PROVIDER=ollama
+OLLAMA_MODEL=hhao/qwen2.5-coder-tools:7b
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Option 2: Use Google Gemini (requires API key)
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_api_key_here
 ```
 
-3. Update test imports:
+### Basic Usage
+
+**1. Update your test imports:**
+
 ```typescript
-// Change from:
+// Before
 import { test, expect } from '@playwright/test';
 
-// To:
+// After
 import { test, expect } from 'playwright-auto-healer';
 ```
 
-4. Run with CLI:
-```bash
-npx playwright-auto-healer scan "npx playwright test"
-```
-
-The CLI will automatically detect broken selectors, heal them with AI, and generate reports.
-
-## How It Works
-
-1. **Selector Fails** → Playwright can't find element
-2. **AI Analysis** → Analyzes DOM and suggests new selector  
-3. **Validation** → Tests suggested selector on live page
-4. **Auto-Heal** → Continues test with working selector
-5. **Report** → Generates recommendations in `.playwright-healer/recommendations/`
-
-## Project Structure
-
-After running tests, the library creates a single organized folder:
-
-```
-.playwright-healer/
-├── recommendations/        # AI healing reports (keep these!)
-│   ├── healing-report.md
-│   └── selector-recommendations.json
-├── logs/                  # Historical DOM snapshots (for debugging)
-│   └── *_dom.html
-└── temp/                  # Runtime temporary files
-    ├── healing-results.json
-    └── last-prompt.txt
-```
-
-> 💡 Add `.playwright-healer/` to your `.gitignore` to keep your repo clean.
-
-**File Management:**
-- **recommendations/** and **logs/** - Kept permanently for your review
-- **temp/** - Automatically cleaned at the **start** of each new run (not at the end)
-- This follows the same pattern as Playwright, Jest, and other testing tools
-- Temp files remain after a run to help with debugging failures
-
-## Features
-
-- ✨ **AI-powered** - Uses Google Gemini to suggest fixes
-- 🔄 **Automatic retry** - Seamlessly retries with healed selectors
-- 📊 **Detailed reports** - JSON and Markdown healing reports
-- 🎯 **Simple setup** - Just change imports and run CLI
-- 🔍 **DOM learning** - Uses historical DOMs for better suggestions
-
-## Usage Options
-
-### Option 1: CLI (Recommended)
+**2. Run with CLI:**
 
 ```bash
 npx playwright-auto-healer scan "npx playwright test"
 ```
 
-Requires import change in tests:
+That's it! The library will automatically detect and heal broken selectors.
+
+## Usage
+
+> **Note:** Methods 1, 2, and 4 automatically heal and continue test execution. Method 3 requires manual handling. Method 5 is for result retrieval only.
+
+### Method 1: CLI (Recommended) • Auto-continues
+
+The simplest way to use auto-healing. Just change imports and run the CLI:
+
 ```typescript
+// tests/login.spec.ts
 import { test, expect } from 'playwright-auto-healer';
-```
 
-### Option 2: Manual Setup
-
-Add to each test:
-```typescript
-import { setupAutoHealing } from 'playwright-auto-healer';
-
-test('my test', async ({ page }) => {
-  setupAutoHealing(page);
-  // ... your test code
+test('login test', async ({ page }) => {
+  await page.goto('https://example.com');
+  await page.locator('#username').fill('user');  // Auto-heals if selector breaks
+  await page.locator('#password').fill('pass');
+  await page.locator('#login-btn').click();
+  
+  await expect(page).toHaveURL('/dashboard');
 });
 ```
 
-### Option 3: API
+```bash
+# Run tests with auto-healing
+npx playwright-auto-healer scan "npx playwright test"
+```
+
+---
+
+### Method 2: Setup Function (Automatic Instrumentation) • Auto-continues
+
+Instrument page.locator() for automatic healing without CLI:
 
 ```typescript
+import { test, expect } from '@playwright/test';
+import { setupAutoHealing } from 'playwright-auto-healer';
+
+test('login test', async ({ page }) => {
+  setupAutoHealing(page);  // Enable auto-healing for this page
+  
+  await page.goto('https://example.com');
+  await page.locator('#broken-selector').fill('user');  // Will auto-heal and continue
+  await page.locator('#password').fill('pass');
+  await page.locator('#login-btn').click();
+  
+  // Test continues automatically if selectors are healed!
+});
+```
+
+**How it works:**
+1. Selector fails → Captures DOM
+2. AI analyzes and suggests fix
+3. Validates new selector
+4. **Automatically retries with healed selector**
+5. Test continues without interruption
+
+---
+
+### Method 3: AutoHealer Class (Manual Healing) • Manual handling required
+
+Full control over the healing process - you decide what to do with healed selectors:
+
+```typescript
+import { test, expect } from '@playwright/test';
 import { AutoHealer } from 'playwright-auto-healer';
 
-const healer = new AutoHealer({ apiKey: process.env.GEMINI_API_KEY });
-const result = await healer.healSelector(page, 'broken-selector');
+test('login test', async ({ page }) => {
+  const healer = new AutoHealer({
+    aiProvider: 'ollama',
+    projectPath: process.cwd()
+  });
+  
+  await page.goto('https://example.com');
+  
+  const brokenSelector = '#username-old';
+  try {
+    await page.locator(brokenSelector).fill('user', { timeout: 2000 });
+  } catch (error) {
+    console.log('Selector failed, attempting to heal...');
+    const result = await healer.healSelector(page, brokenSelector);
+    
+    if (result.success && result.newSelector) {
+      console.log(`Healed: ${brokenSelector} → ${result.newSelector}`);
+      // YOU must manually use the new selector
+      await page.locator(result.newSelector).fill('user');
+    } else {
+      throw new Error(`Could not heal selector: ${result.error}`);
+    }
+  }
+});
+```
 
-if (result.success) {
-  await page.locator(result.newSelector).click();
-}
+**How it works:**
+1. Selector fails → You catch the error
+2. Call `healSelector()` manually
+3. Get result with `success` flag and `newSelector`
+4. **You must manually use the healed selector to continue**
+5. Full control over error handling
+
+---
+
+### Method 4: PlaywrightHealer Wrapper (OOP Style) • Auto-continues
+
+Object-oriented API with built-in healing:
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { withAutoHealing } from 'playwright-auto-healer';
+
+test('login test', async ({ page }) => {
+  const healer = withAutoHealing(page, {
+    aiProvider: 'ollama',
+    projectPath: process.cwd()
+  });
+  
+  await page.goto('https://example.com');
+  
+  // Use healer methods instead of page.locator
+  await healer.fill('#username', 'user');
+  await healer.fill('#password', 'pass');
+  await healer.click('#login-btn');
+  
+  await expect(page).toHaveURL('/dashboard');
+  
+  // Print summary of healed selectors
+  healer.printHealingSummary();
+  
+  // Or get results programmatically
+  const healedSelectors = healer.getHealedSelectors();
+  console.log(`Healed ${healedSelectors.length} selectors`);
+});
+```
+
+**How it works:**
+1. Use healer methods (`fill()`, `click()`, etc.) instead of `page.locator()`
+2. Selector fails → Automatically heals
+3. **Automatically retries with healed selector**
+4. Test continues without interruption
+5. Track healed selectors with `getHealedSelectors()` or `printHealingSummary()`
+
+---
+
+### Method 5: Get Healing Results • Result retrieval only
+
+Retrieve healing results after test execution (does not perform healing):
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { setupAutoHealing, getHealingResults } from 'playwright-auto-healer';
+
+test('login test', async ({ page }) => {
+  setupAutoHealing(page);
+  
+  await page.goto('https://example.com');
+  await page.locator('#username').fill('user');
+  await page.locator('#password').fill('pass');
+  await page.locator('#login-btn').click();
+});
+
+test.afterAll(() => {
+  const results = getHealingResults();
+  
+  console.log(`Total healings: ${results.length}`);
+  console.log(`Successful: ${results.filter(r => r.status === 'healed').length}`);
+  console.log(`Failed: ${results.filter(r => r.status === 'failed').length}`);
+  
+  // Process results for reporting, CI/CD integration, etc.
+  results.forEach(result => {
+    if (result.status === 'healed') {
+      console.log(`✓ ${result.originalSelector} → ${result.newSelector}`);
+    }
+  });
+});
+```
+
+**How it works:**
+- Call after tests complete to retrieve healing history
+- Does NOT perform healing - only retrieves results
+- Useful for reporting, analytics, and CI/CD integration
+
+---
+
+## Auto-Healing Flow
+
+This flow applies to **Methods 1, 2, and 4** (automatic healing):
+
+```
+┌─────────────────────┐
+│  Selector Fails     │  Playwright can't find element
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Capture DOM        │  Save current page structure
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  AI Analysis        │  Analyze DOM + historical data
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Validate Fix       │  Test suggested selector on live page
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Auto-Heal          │  Automatically retry with working selector
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Continue Test      │  Test execution continues seamlessly
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Generate Report    │  Save recommendations for code updates
+└─────────────────────┘
+```
+
+**Method 3 (Manual)** stops after "Validate Fix" and returns control to you.
+
+**Method 5** only accesses the "Generate Report" step to retrieve results.
 ```
 
 ## Configuration
 
+### HealerConfig Interface
+
 ```typescript
 interface HealerConfig {
-  aiProvider?: 'gemini';      // More providers coming soon
-  apiKey?: string;             // Gemini API key
-  createPR?: boolean;          // Auto-create GitHub PRs (future)
-  projectPath?: string;        // Project root path
-  maxRetries?: number;         // Max healing attempts
+  aiProvider?: 'gemini' | 'ollama';    // AI provider to use
+  apiKey?: string;                      // Gemini API key (required for Gemini)
+  ollamaModel?: string;                 // Ollama model name
+  ollamaBaseUrl?: string;               // Ollama server URL
+  projectPath?: string;                 // Project root path
+  maxRetries?: number;                  // Max healing attempts per selector
+  createPR?: boolean;                   // Auto-create GitHub PRs (future)
 }
+```
+
+### Environment Variables
+
+```env
+# AI Provider Selection
+AI_PROVIDER=ollama                           # or 'gemini'
+
+# Ollama Configuration (default provider)
+OLLAMA_MODEL=hhao/qwen2.5-coder-tools:7b    # AI model to use
+OLLAMA_BASE_URL=http://localhost:11434      # Ollama server URL
+
+# Gemini Configuration (alternative provider)
+GEMINI_API_KEY=your_gemini_api_key_here     # Required for Gemini
+```
+
+### Example Configurations
+
+**Local Ollama (Free, Recommended):**
+```typescript
+setupAutoHealing(page, {
+  aiProvider: 'ollama',
+  ollamaModel: 'hhao/qwen2.5-coder-tools:7b',
+  ollamaBaseUrl: 'http://localhost:11434'
+});
+```
+
+**Google Gemini (Cloud-based):**
+```typescript
+setupAutoHealing(page, {
+  aiProvider: 'gemini',
+  apiKey: process.env.GEMINI_API_KEY
+});
+```
+
+## Project Structure
+
+After running tests, the library creates an organized folder structure:
+
+```
+.playwright-healer/
+├── recommendations/              # AI healing reports (keep these!)
+│   ├── healing-report.md        # Human-readable report
+│   └── selector-recommendations.json  # Machine-readable data
+├── logs/                        # Historical DOM snapshots
+│   └── *_dom.html              # Saved for debugging
+└── temp/                       # Runtime files (auto-cleaned)
+    ├── healing-results.json    # Current session results
+    └── last-prompt.txt         # Last AI prompt (debugging)
+```
+
+**File Management Best Practices:**
+- Add `.playwright-healer/` to your `.gitignore`
+- `recommendations/` and `logs/` are kept permanently for review
+- `temp/` is automatically cleaned at the **start** of each run (not end)
+- Follows the same pattern as Playwright, Jest, and Cypress
+
+## 🔍 How It Works
+
+```
+┌─────────────────────┐
+│  Selector Fails     │  Playwright can't find element
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Capture DOM        │  Save current page structure
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  AI Analysis        │  Analyze DOM + historical data
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Validate Fix       │  Test suggested selector on live page
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Auto-Heal          │  Continue test with working selector
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Generate Report    │  Save recommendations for code updates
+└─────────────────────┘
 ```
 
 ## Reports
 
-After running, check `.playwright-healer/recommendations/`:
-- `healing-report.md` - Human-readable report with before/after
-- `selector-recommendations.json` - Machine-readable JSON
+### Healing Report (Markdown)
+
+Located at `.playwright-healer/recommendations/healing-report.md`:
+
+```markdown
+# Playwright Auto-Healer Report
+
+Generated: 2025-11-11T10:30:00Z
+
+## Summary
+- Total: 5
+- Healed: 4
+- Failed: 1
+
+## Successfully Healed
+
+### 1. #user-name-old → #user-name
+
+File: tests/login.spec.ts
+Line: 12
+Status: healed
+
+Before: await page.locator('#user-name-old').fill('user');
+After:  await page.locator('#user-name').fill('user');
+```
+
+### Recommendations JSON
+
+Located at `.playwright-healer/recommendations/selector-recommendations.json`:
+
+```json
+{
+  "timestamp": "2025-11-11T10:30:00Z",
+  "stats": {
+    "total": 5,
+    "healed": 4,
+    "failed": 1
+  },
+  "results": [
+    {
+      "file": "tests/login.spec.ts",
+      "line": 12,
+      "originalSelector": "#user-name-old",
+      "newSelector": "#user-name",
+      "status": "healed",
+      "timestamp": "2025-11-11T10:30:00Z"
+    }
+  ]
+}
+```
+
+## Author
+
+**Martin Marchetto**
+- Email: martin.marchetto@gmail.com
+- GitHub: [@marttinm](https://github.com/marttinm)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Roadmap
 
-- [ ] OpenAI, Claude, Azure OpenAI support
-- [ ] Performance optimizations and caching
-- [ ] GitHub PR auto-creation
+- [ ] Support for OpenAI, Claude, and Azure OpenAI
+- [ ] Visual regression detection
+- [ ] GitHub PR auto-creation for healed selectors
 - [ ] Team analytics dashboard
+- [ ] Selector stability scoring
+- [ ] CI/CD integration templates
 
 ## License
 
-MIT - see [LICENSE](LICENSE)
+MIT - see [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the Playwright community**
+
+[Report Bug](https://github.com/marttinm/playwright-auto-healer/issues) • [Request Feature](https://github.com/marttinm/playwright-auto-healer/issues)
+
+</div>
