@@ -486,7 +486,7 @@ MIT - see [LICENSE](LICENSE) file for details.
 
 <div align="center">
 
-**Built with ❤️ for the Playwright community**
+**Built for the Playwright community**
 
 [Report Bug](https://github.com/marttinm/playwright-auto-healer/issues) • [Request Feature](https://github.com/marttinm/playwright-auto-healer/issues)
 
