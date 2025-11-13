@@ -16,6 +16,24 @@ interface HealingResult {
 
 const globalHealingCache = new Map<string, { newSelector: string; success: boolean }>();
 
+function getCallerInfo(): { file: string; line: number } {
+  const stack = new Error().stack;
+  if (!stack) return { file: 'unknown', line: 0 };
+  
+  const lines = stack.split('\n');
+  for (const line of lines) {
+    if (line.includes('.spec.') || line.includes('.test.')) {
+      const match = line.match(/\((.+):(\d+):\d+\)/) || line.match(/at\s+(.+):(\d+):\d+/);
+      if (match) {
+        const filePath = match[1];
+        const fileName = filePath.split(/[/\\]/).pop() || filePath;
+        return { file: fileName, line: parseInt(match[2], 10) };
+      }
+    }
+  }
+  return { file: 'unknown', line: 0 };
+}
+
 function detectSelectorType(selector: string): HealingResult['selectorType'] {
   if (!selector) return 'unknown';
   
@@ -84,10 +102,11 @@ export function instrumentPage(page: PlaywrightPage, config: HealerConfig): void
         globalHealingCache.set(selector, { newSelector: result.newSelector, success: true });
         
         const selectorType = detectSelectorType(result.newSelector);
+        const { file, line } = getCallerInfo();
         
         saveHealingResult({
-          file: 'auto-detected',
-          line: 0,
+          file,
+          line,
           originalSelector: selector,
           newSelector: result.newSelector,
           selectorType: selectorType,
@@ -102,8 +121,8 @@ export function instrumentPage(page: PlaywrightPage, config: HealerConfig): void
           const selectorType = detectSelectorType(result.newSelector);
           
           saveHealingResult({
-            file: 'auto-detected',
-            line: 0,
+            file,
+            line,
             originalSelector: selector,
             newSelector: result.newSelector,
             selectorType: selectorType,
@@ -114,10 +133,11 @@ export function instrumentPage(page: PlaywrightPage, config: HealerConfig): void
       } else {
         console.log(`Healing failed: ${result.error || 'No suggestion'}`);
         const selectorType = result.newSelector ? detectSelectorType(result.newSelector) : undefined;
+        const { file, line } = getCallerInfo();
         
         saveHealingResult({
-          file: 'auto-detected',
-          line: 0,
+          file,
+          line,
           originalSelector: selector,
           newSelector: result.newSelector,
           selectorType: selectorType,

@@ -109,28 +109,72 @@ class PlaywrightHealerCLI {
   }
 
   private generateMarkdown(healed: HealingResult[], failed: HealingResult[]): string {
+    // Deduplicate results by file+line+originalSelector only (keep first occurrence)
+    const dedupeHealed = Array.from(
+      new Map(healed.map(r => [`${r.file}:${r.line}:${r.originalSelector}`, r])).values()
+    );
+    const dedupeFailed = Array.from(
+      new Map(failed.map(r => [`${r.file}:${r.line}:${r.originalSelector}`, r])).values()
+    );
+
     let md = `# Playwright Auto-Healer Report\n\nGenerated: ${new Date().toISOString()}\n\n`;
     md += `## Summary\n\n`;
-    md += `- **Total**: ${healed.length + failed.length}\n`;
-    md += `- **Healed**: ${healed.length}\n`;
-    md += `- **Failed**: ${failed.length}\n\n`;
+    md += `- **Total**: ${dedupeHealed.length + dedupeFailed.length}\n`;
+    md += `- **Healed**: ${dedupeHealed.length}\n`;
+    md += `- **Failed**: ${dedupeFailed.length}\n\n`;
 
-    if (healed.length > 0) {
+    if (dedupeHealed.length > 0) {
       md += `## Successfully Healed\n\n`;
-      healed.forEach((r, i) => {
-        md += `### ${i + 1}. \`${r.originalSelector}\` → \`${r.newSelector}\`\n\n`;
-        md += `\`\`\`typescript\n`;
-        md += `// Before\nawait page.locator('${r.originalSelector}').click();\n\n`;
-        md += `// After\nawait page.locator('${r.newSelector}').click();\n`;
-        md += `\`\`\`\n\n`;
+      
+      // Group by file and sort by line number
+      const byFile = new Map<string, HealingResult[]>();
+      dedupeHealed.forEach(r => {
+        const file = r.file || 'unknown';
+        if (!byFile.has(file)) byFile.set(file, []);
+        byFile.get(file)!.push(r);
+      });
+
+      // Sort each file's results by line number
+      byFile.forEach(results => results.sort((a, b) => a.line - b.line));
+
+      // Generate markdown grouped by file
+      let counter = 1;
+      byFile.forEach((results, file) => {
+        md += `### ${file}\n\n`;
+        results.forEach(r => {
+          md += `#### ${counter}. Line ${r.line}: \`${r.originalSelector}\` → \`${r.newSelector}\`\n\n`;
+          md += `\`\`\`typescript\n`;
+          md += `// Before\nawait page.locator('${r.originalSelector}').click();\n\n`;
+          md += `// After\nawait page.locator('${r.newSelector}').click();\n`;
+          md += `\`\`\`\n\n`;
+          counter++;
+        });
       });
     }
 
-    if (failed.length > 0) {
+    if (dedupeFailed.length > 0) {
       md += `## Failed to Heal\n\n`;
-      failed.forEach((r, i) => {
-        md += `### ${i + 1}. \`${r.originalSelector}\`\n\n`;
-        md += `Manual inspection required.\n\n`;
+      
+      // Group by file and sort by line number
+      const byFile = new Map<string, HealingResult[]>();
+      dedupeFailed.forEach(r => {
+        const file = r.file || 'unknown';
+        if (!byFile.has(file)) byFile.set(file, []);
+        byFile.get(file)!.push(r);
+      });
+
+      // Sort each file's results by line number
+      byFile.forEach(results => results.sort((a, b) => a.line - b.line));
+
+      // Generate markdown grouped by file
+      let counter = 1;
+      byFile.forEach((results, file) => {
+        md += `### ${file}\n\n`;
+        results.forEach(r => {
+          md += `#### ${counter}. Line ${r.line}: \`${r.originalSelector}\`\n\n`;
+          md += `Manual inspection required.\n\n`;
+          counter++;
+        });
       });
     }
 
