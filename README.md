@@ -25,10 +25,10 @@ Playwright Auto-Healer automatically fixes broken selectors in your Playwright t
 
 ## Features
 
-- **AI-Powered Healing** - Uses Google Gemini or local Ollama for intelligent selector suggestions
+- **AI-Powered Healing** - Uses Google Gemini, Anthropic Claude, or local Ollama for intelligent selector suggestions
 - **Zero Configuration** - Works out of the box with sensible defaults
 - **Automatic Retry** - Seamlessly retries with healed selectors
-- **Detailed Reports** - JSON and Markdown reports with before/after comparisons
+- **Detailed Reports** - JSON and Markdown reports with file locations, grouped by file and sorted by line
 - **Multiple APIs** - Choose from CLI, function hooks, or class-based approaches
 - **Historical Learning** - Uses past DOM snapshots for better suggestions
 - **Production Ready** - Follows industry best practices for temp file management
@@ -54,6 +54,11 @@ OLLAMA_BASE_URL=http://localhost:11434
 # Option 2: Use Google Gemini (requires API key)
 AI_PROVIDER=gemini
 GEMINI_API_KEY=your_api_key_here
+
+# Option 3: Use Anthropic Claude (requires API key)
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your_api_key_here
+ANTHROPIC_MODEL=claude-3-haiku-20240307
 ```
 
 ### Basic Usage
@@ -308,13 +313,14 @@ This flow applies to **Methods 1, 2, and 4** (automatic healing):
 
 ```typescript
 interface HealerConfig {
-  aiProvider?: 'gemini' | 'ollama';    // AI provider to use
-  apiKey?: string;                      // Gemini API key (required for Gemini)
-  ollamaModel?: string;                 // Ollama model name
-  ollamaBaseUrl?: string;               // Ollama server URL
-  projectPath?: string;                 // Project root path
-  maxRetries?: number;                  // Max healing attempts per selector
-  createPR?: boolean;                   // Auto-create GitHub PRs (future)
+  aiProvider?: 'gemini' | 'ollama' | 'anthropic';  // AI provider to use
+  apiKey?: string;                                  // Gemini/Anthropic API key
+  ollamaModel?: string;                             // Ollama model name
+  ollamaBaseUrl?: string;                           // Ollama server URL
+  anthropicModel?: string;                          // Anthropic model name
+  projectPath?: string;                             // Project root path
+  maxRetries?: number;                              // Max healing attempts per selector
+  createPR?: boolean;                               // Auto-create GitHub PRs (future)
 }
 ```
 
@@ -322,7 +328,7 @@ interface HealerConfig {
 
 ```env
 # AI Provider Selection
-AI_PROVIDER=ollama                           # or 'gemini'
+AI_PROVIDER=ollama                           # or 'gemini' or 'anthropic'
 
 # Ollama Configuration (default provider)
 OLLAMA_MODEL=hhao/qwen2.5-coder-tools:7b    # AI model to use
@@ -330,6 +336,10 @@ OLLAMA_BASE_URL=http://localhost:11434      # Ollama server URL
 
 # Gemini Configuration (alternative provider)
 GEMINI_API_KEY=your_gemini_api_key_here     # Required for Gemini
+
+# Anthropic Configuration (alternative provider)
+ANTHROPIC_API_KEY=your_anthropic_api_key    # Required for Anthropic
+ANTHROPIC_MODEL=claude-3-haiku-20240307     # Claude model to use
 ```
 
 ### Example Configurations
@@ -348,6 +358,15 @@ setupAutoHealing(page, {
 setupAutoHealing(page, {
   aiProvider: 'gemini',
   apiKey: process.env.GEMINI_API_KEY
+});
+```
+
+**Anthropic Claude (Cloud-based):**
+```typescript
+setupAutoHealing(page, {
+  aiProvider: 'anthropic',
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  anthropicModel: 'claude-3-haiku-20240307'
 });
 ```
 
@@ -415,24 +434,55 @@ Located at `.playwright-healer/recommendations/healing-report.md`:
 ```markdown
 # Playwright Auto-Healer Report
 
-Generated: 2025-11-11T10:30:00Z
+Generated: 2025-11-13T10:30:00Z
 
 ## Summary
 - Total: 5
-- Healed: 4
-- Failed: 1
+- Healed: 5
+- Failed: 0
 
 ## Successfully Healed
 
-### 1. #user-name-old → #user-name
+### login.spec.ts
 
-File: tests/login.spec.ts
-Line: 12
-Status: healed
+#### 1. Line 12: `#user-name-old` → `#user-name`
 
-Before: await page.locator('#user-name-old').fill('user');
-After:  await page.locator('#user-name').fill('user');
+```typescript
+// Before
+await page.locator('#user-name-old').fill('user');
+
+// After
+await page.locator('#user-name').fill('user');
 ```
+
+#### 2. Line 15: `#password-old` → `#password`
+
+```typescript
+// Before
+await page.locator('#password-old').fill('pass');
+
+// After
+await page.locator('#password').fill('pass');
+```
+
+### checkout.spec.ts
+
+#### 3. Line 8: `.btn-submit-old` → `[data-test="submit"]`
+
+```typescript
+// Before
+await page.locator('.btn-submit-old').click();
+
+// After
+await page.locator('[data-test="submit"]').click();
+```
+```
+
+**Report Features:**
+- Grouped by file for easy navigation
+- Sorted by line number within each file
+- Shows exact file location for each fix
+- Provides before/after code examples
 
 ### Recommendations JSON
 
@@ -440,20 +490,30 @@ Located at `.playwright-healer/recommendations/selector-recommendations.json`:
 
 ```json
 {
-  "timestamp": "2025-11-11T10:30:00Z",
+  "timestamp": "2025-11-13T10:30:00Z",
   "stats": {
     "total": 5,
-    "healed": 4,
-    "failed": 1
+    "healed": 5,
+    "failed": 0
   },
   "results": [
     {
-      "file": "tests/login.spec.ts",
+      "file": "login.spec.ts",
       "line": 12,
       "originalSelector": "#user-name-old",
       "newSelector": "#user-name",
+      "selectorType": "cssSelector",
       "status": "healed",
-      "timestamp": "2025-11-11T10:30:00Z"
+      "timestamp": "2025-11-13T10:30:00Z"
+    },
+    {
+      "file": "login.spec.ts",
+      "line": 15,
+      "originalSelector": "#password-old",
+      "newSelector": "#password",
+      "selectorType": "cssSelector",
+      "status": "healed",
+      "timestamp": "2025-11-13T10:30:00Z"
     }
   ]
 }
@@ -471,7 +531,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Roadmap
 
-- [ ] Support for OpenAI, Claude, and Azure OpenAI
+- [x] Support for Anthropic Claude
+- [x] File and line number tracking in reports
+- [x] Grouped and sorted healing reports
+- [ ] Support for OpenAI and Azure OpenAI
 - [ ] Visual regression detection
 - [ ] GitHub PR auto-creation for healed selectors
 - [ ] Team analytics dashboard
