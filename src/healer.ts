@@ -9,44 +9,63 @@ export class AutoHealer {
   private aiProvider: AIProvider;
   private domManager: DOMManager;
   private config: Required<HealerConfig>;
+  private healingCache: Map<string, HealingResult> = new Map();
 
   constructor(config: HealerConfig) {
+    const provider = (process.env.AI_PROVIDER as 'gemini' | 'ollama' | 'anthropic') || 'ollama';
+    
+    let apiKey = '';
+    if (provider === 'gemini') {
+      apiKey = process.env.GEMINI_API_KEY || '';
+    } else if (provider === 'anthropic') {
+      apiKey = process.env.ANTHROPIC_API_KEY || '';
+    }
+    
     this.config = {
-      aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'ollama') || 'ollama',
-      apiKey: process.env.GEMINI_API_KEY || '',
+      aiProvider: provider,
+      apiKey: apiKey,
       ollamaModel: process.env.OLLAMA_MODEL || 'hhao/qwen2.5-coder-tools:7b',
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+      anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307',
       createPR: false,
       projectPath: process.cwd(),
       maxRetries: 1,
       ...config
     };
 
-    const provider = this.config.aiProvider || 'ollama';
     console.log(`Using AI Provider: ${provider}`);
     
     if (provider === 'gemini' && !this.config.apiKey) {
       throw new Error('GEMINI_API_KEY is required when using Gemini provider. Set AI_PROVIDER=ollama to use local Ollama instead.');
     }
 
+    if (provider === 'anthropic' && !this.config.apiKey) {
+      throw new Error('ANTHROPIC_API_KEY is required when using Anthropic provider. Set AI_PROVIDER=ollama to use local Ollama instead.');
+    }
+
     this.aiProvider = new AIProvider(
       provider,
       this.config.apiKey,
       this.config.ollamaModel,
-      this.config.ollamaBaseUrl
+      this.config.ollamaBaseUrl,
+      this.config.anthropicModel
     );
     this.domManager = new DOMManager(this.config.projectPath);
   }
 
   async healSelector(page: PlaywrightPage, selector: string): Promise<HealingResult> {
     try {
+      const cached = this.healingCache.get(selector);
+      if (cached) {
+        console.log(`Using cached healing: ${selector} → ${cached.newSelector}`);
+        return cached;
+      }
+
       console.log(`Auto-healing selector: ${selector}`);
 
-      // Get current and historical DOM
       const currentDOM = await this.domManager.getCurrentDOM(page);
       const historicalDOM = await this.domManager.getHistoricalDOM(selector);
 
-      // Ask AI for suggestion
       const newSelector = await this.aiProvider.suggestSelector(
         selector,
         currentDOM,
@@ -72,19 +91,29 @@ export class AutoHealer {
         console.log(`Healed selector: ${selector} → ${newSelector}`);
         console.log(`Consider updating your test with the new selector: ${newSelector}`);
         
-        return {
+        const result: HealingResult = {
           success: true,
           originalSelector: selector,
           newSelector,
           suggestion: `Replace '${selector}' with '${newSelector}' in your test file`
         };
+        
+        // Cache successful healing
+        this.healingCache.set(selector, result);
+        
+        return result;
       } catch {
-        return {
+        const result: HealingResult = {
           success: false,
           originalSelector: selector,
           newSelector,
           error: 'Suggested selector also failed'
         };
+        
+        // Cache failed healing to avoid retrying
+        this.healingCache.set(selector, result);
+        
+        return result;
       }
     } catch (error) {
       return {

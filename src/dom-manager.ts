@@ -40,7 +40,6 @@ export class DOMManager {
   }
 
   private getSelectorFilename(selector: string): string {
-    // Create safe filename from selector
     const safe = selector.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
     return `${safe}_dom.html`;
   }

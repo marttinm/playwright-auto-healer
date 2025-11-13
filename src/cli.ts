@@ -22,7 +22,6 @@ class PlaywrightHealerCLI {
   async run(command: string[]): Promise<void> {
     console.log('Starting Playwright Auto-Healer...\n');
     
-    // Clean temp files from previous run (best practice)
     this.cleanPreviousTempFiles();
     
     this.ensureOutputDirectory();
@@ -34,8 +33,6 @@ class PlaywrightHealerCLI {
     });
 
     playwrightProcess.on('close', (code) => {
-      // Delay to ensure healing results are fully written
-      // (Playwright may still be writing files after process closes)
       setTimeout(() => {
         this.generateReport();
         console.log(`\nReports saved to ${this.outputDir}/`);
@@ -51,7 +48,6 @@ class PlaywrightHealerCLI {
   }
 
   private cleanPreviousTempFiles(): void {
-    // Clean temp files from previous run (best practice - clean at start, not end)
     const tempFile = join(process.cwd(), '.playwright-healer', 'temp', 'healing-results.json');
     if (existsSync(tempFile)) {
       try { 
@@ -90,10 +86,6 @@ class PlaywrightHealerCLI {
       this.generateMarkdown(healed, failed)
     );
 
-    // Note: We keep temp files for debugging (like Playwright, Jest, etc.)
-    // They will be cleaned at the start of the next run
-
-    // Print summary
     if (healed.length > 0) {
       console.log(`\nSuccessfully healed ${healed.length} selector(s)!`);
     } else if (results.length > 0) {
@@ -167,12 +159,10 @@ function parseArgs(): string[] {
     process.exit(1);
   }
 
-  // Default to "npx playwright test" if no command provided
   if (args.length === 1) {
     return ['npx', 'playwright', 'test'];
   }
 
-  // Parse command
   const commandStr = args.slice(1).join(' ');
   return commandStr.split(' ');
 }
